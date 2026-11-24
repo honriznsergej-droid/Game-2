@@ -545,6 +545,7 @@
     let screenShake = 0;
     let hitFlash = 0;
     let elapsed = 0;
+    let skyFlyerIndex = 0;
 
     const player = {
       x: 110,
@@ -580,6 +581,7 @@
       particles = [];
       floatingTexts = [];
       score = 0;
+      skyFlyerIndex = 0;
       worldSpeed = 215;
       screenShake = 0;
       hitFlash = 0;
@@ -660,6 +662,13 @@
     startBtn.addEventListener('click', startGame);
     restartBtn.addEventListener('click', startGame);
 
+    function nextSkyFlyerKind() {
+      const order = ['carpet', 'taxi', 'falcon'];
+      const kind = order[skyFlyerIndex % order.length];
+      skyFlyerIndex += 1;
+      return kind;
+    }
+
     function spawnObstacle() {
       const playableTop = 74;
       const playableBottom = height - groundHeight - 18;
@@ -690,10 +699,11 @@
           h
         });
       } else {
-        const r = 22;
+        const kind = nextSkyFlyerKind();
+        const r = kind === 'taxi' ? 25 : 22;
         const cy = playableTop + 36 + Math.random() * Math.max(60, playableH - 72);
         obstacles.push({
-          kind: 'drone',
+          kind,
           x: width + 40,
           y: cy,
           baseY: cy,
@@ -760,6 +770,13 @@
       const dx = cx - closestX;
       const dy = cy - closestY;
       return (dx * dx + dy * dy) < (cr * cr);
+    }
+
+    function getCrashReason(obs) {
+      if (obs.kind === 'carpet') return 'Не поделил небо с летающим ковром над Дубаем!';
+      if (obs.kind === 'taxi') return 'Подрезал дубайское аэротакси в час пик!';
+      if (obs.kind === 'falcon') return 'Пересёк траекторию пустынного сокола!';
+      return 'Столкновение с препятствием!';
     }
 
     function update(dt) {
@@ -876,9 +893,9 @@
         const obs = obstacles[i];
         obs.x -= worldSpeed * dt;
 
-        if (obs.kind === 'drone') {
-          obs.phase += dt * 3.4;
-          obs.y = obs.baseY + Math.sin(obs.phase) * 26;
+        if (obs.kind === 'carpet' || obs.kind === 'taxi' || obs.kind === 'falcon') {
+          obs.phase += dt * (obs.kind === 'falcon' ? 4.4 : 3.2);
+          obs.y = obs.baseY + Math.sin(obs.phase) * (obs.kind === 'carpet' ? 24 : 18);
         } else if (obs.kind === 'chimney') {
           obs.smokeTimer -= dt;
           if (obs.smokeTimer <= 0) {
@@ -898,10 +915,10 @@
         }
 
         let hit = false;
-        if (obs.kind === 'drone') {
+        if (obs.kind === 'carpet' || obs.kind === 'taxi' || obs.kind === 'falcon') {
           const dx = player.x - obs.x;
           const dy = player.y - obs.y;
-          const sumR = obs.r + Math.min(player.radiusX, player.radiusY) * 0.78;
+          const sumR = obs.r * 0.88 + Math.min(player.radiusX, player.radiusY) * 0.74;
           hit = (dx * dx + dy * dy) < (sumR * sumR);
         } else {
           hit = circleRectCollide(
@@ -917,7 +934,7 @@
 
         if (hit) {
           addParticles(player.x, player.y, 18, ['#ffd166', '#ef476f', '#ffffff'], [70, 200]);
-          endGame('Столкновение с препятствием!');
+          endGame(getCrashReason(obs));
           return;
         }
 
@@ -1187,29 +1204,96 @@
           ctx.fillStyle = '#f77f00';
           ctx.fillRect(obs.x - 3, obs.y, obs.w + 6, 12);
           ctx.strokeRect(obs.x - 3, obs.y, obs.w + 6, 12);
-        } else if (obs.kind === 'drone') {
+        } else if (obs.kind === 'carpet') {
           ctx.save();
           ctx.translate(obs.x, obs.y);
-          ctx.fillStyle = '#2b2d42';
+          ctx.rotate(Math.sin(obs.phase) * 0.08);
+
+          ctx.fillStyle = '#8b1e3f';
+          ctx.strokeStyle = '#ffd166';
+          ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.arc(0, 0, obs.r, 0, Math.PI * 2);
+          ctx.roundRect(-26, -7, 52, 14, 5);
           ctx.fill();
+          ctx.stroke();
+
+          ctx.strokeStyle = '#ffe699';
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(-18, -3, 36, 6);
+
+          ctx.fillStyle = '#ffd166';
+          ctx.fillRect(-29, -3, 3, 6);
+          ctx.fillRect(26, -3, 3, 6);
+          ctx.restore();
+        } else if (obs.kind === 'taxi') {
+          ctx.save();
+          ctx.translate(obs.x, obs.y);
+
+          ctx.fillStyle = '#f8f9fa';
+          ctx.strokeStyle = '#212529';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.roundRect(-24, -10, 48, 20, 9);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = '#2b9348';
+          ctx.beginPath();
+          ctx.roundRect(-16, -6, 32, 8, 4);
+          ctx.fill();
+
+          const blink = Math.sin(elapsed * 14) > 0;
+          ctx.fillStyle = blink ? '#ffbe0b' : '#3a86ff';
+          ctx.beginPath();
+          ctx.arc(-14, 5, 3, 0, Math.PI * 2);
+          ctx.arc(14, 5, 3, 0, Math.PI * 2);
+          ctx.fill();
+
+          const span = Math.abs(Math.cos(elapsed * 26)) * 22 + 8;
+          ctx.strokeStyle = '#ffd166';
           ctx.lineWidth = 2.5;
-          ctx.strokeStyle = '#ef233c';
-          ctx.stroke();
-
-          ctx.fillStyle = '#ffbe0b';
           ctx.beginPath();
-          ctx.arc(4, 0, 7, 0, Math.PI * 2);
+          ctx.moveTo(-span, -14);
+          ctx.lineTo(span, -14);
+          ctx.stroke();
+          ctx.restore();
+        } else if (obs.kind === 'falcon') {
+          ctx.save();
+          ctx.translate(obs.x, obs.y);
+          const wingY = Math.sin(elapsed * 16) * 10;
+
+          ctx.fillStyle = '#6f4518';
+          ctx.beginPath();
+          ctx.ellipse(0, 0, 16, 9, 0, 0, Math.PI * 2);
           ctx.fill();
 
-          const rotorSpan = Math.abs(Math.cos(elapsed * 28)) * 26 + 8;
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 3;
+          ctx.fillStyle = '#582f0e';
           ctx.beginPath();
-          ctx.moveTo(-rotorSpan, -obs.r - 4);
-          ctx.lineTo(rotorSpan, -obs.r - 4);
-          ctx.stroke();
+          ctx.moveTo(-4, -3);
+          ctx.lineTo(-14, -14 - wingY * 0.4);
+          ctx.lineTo(8, -2);
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.moveTo(-4, 3);
+          ctx.lineTo(-14, 14 + wingY * 0.4);
+          ctx.lineTo(8, 2);
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.fillStyle = '#ffb703';
+          ctx.beginPath();
+          ctx.moveTo(15, -2);
+          ctx.lineTo(24, 1);
+          ctx.lineTo(15, 4);
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.fillStyle = '#fff';
+          ctx.beginPath();
+          ctx.arc(8, -2, 2.5, 0, Math.PI * 2);
+          ctx.fill();
           ctx.restore();
         }
       }
@@ -1298,19 +1382,6 @@
         const drawW = w * scale;
         const drawH = h * scale;
         ctx.drawImage(customSprite, -drawW * 0.5, -drawH * 0.5, drawW, drawH);
-
-        // Динамическое размытие лопасти поверх пропеллера при наборе высоты
-        const thrusting = state === 'playing' && holding && player.energy > 0;
-        const blurWidth = thrusting ? 46 + Math.sin(player.propellerPhase) * 10 : 18;
-        ctx.save();
-        ctx.translate(0, -drawH * 0.44);
-        ctx.fillStyle = thrusting
-          ? 'rgba(255, 90, 90, 0.36)'
-          : 'rgba(255, 255, 255, 0.14)';
-        ctx.beginPath();
-        ctx.ellipse(0, 0, blurWidth, thrusting ? 5 : 2.5, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
       } else {
         drawFallbackMonkey();
       }
