@@ -6,7 +6,7 @@
   <title>Monkey Propeller Jetpack</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
-    * {
+- {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
@@ -262,7 +262,7 @@
 
       <div class="hud-right">
         <div class="stat-pill">
-          <div class="stat-title">Бананы</div>
+          <div class="stat-title">Очки</div>
           <div class="stat-value" id="scoreVal">0</div>
         </div>
         <div class="stat-pill">
@@ -295,7 +295,7 @@
         <div class="final-stats">
           <div class="final-box">
             <div class="num" id="finalScore">0</div>
-            <div class="lbl">БАНАНЫ</div>
+            <div class="lbl">ОЧКИ</div>
           </div>
           <div class="final-box">
             <div class="num" id="finalBest">0</div>
@@ -465,14 +465,6 @@
     let midBuildings = [];
     let streetProps = [];
 
-    function randomDubaiStyle() {
-      const r = Math.random();
-      if (r < 0.24) return 'burj';
-      if (r < 0.48) return 'twist';
-      if (r < 0.68) return 'sail';
-      return 'glass';
-    }
-
     function initScenery() {
       clouds = Array.from({ length: 6 }, (_, i) => ({
         x: (width / 5) * i + Math.random() * 80,
@@ -483,29 +475,30 @@
 
       farBuildings = [];
       let fx = -40;
-      while (fx < width + 240) {
-        const bw = 60 + Math.random() * 65;
-        const bh = 120 + Math.random() * 155;
+      while (fx < width + 220) {
+        const bw = 65 + Math.random() * 75;
+        const bh = 95 + Math.random() * 125;
         farBuildings.push({
           x: fx,
           w: bw,
           h: bh,
-          style: randomDubaiStyle()
+          hasSpire: Math.random() < 0.25,
+          hueShift: Math.random() * 12 - 6
         });
-        fx += bw + 10;
+        fx += bw + 6;
       }
 
       midBuildings = [];
       let mx = -60;
-      while (mx < width + 280) {
-        const bw = 96 + Math.random() * 68;
-        const bh = 145 + Math.random() * 145;
-        const cols = Math.max(3, Math.floor((bw - 20) / 22));
-        const rows = Math.max(4, Math.floor((bh - 30) / 28));
+      while (mx < width + 260) {
+        const bw = 105 + Math.random() * 75;
+        const bh = 120 + Math.random() * 110;
+        const cols = Math.max(2, Math.floor((bw - 24) / 28));
+        const rows = Math.max(2, Math.floor((bh - 36) / 34));
         const litWindows = [];
         for (let r = 0; r < rows; r++) {
           for (let c = 0; c < cols; c++) {
-            litWindows.push(Math.random() < 0.42);
+            litWindows.push(Math.random() < 0.36);
           }
         }
         midBuildings.push({
@@ -515,10 +508,9 @@
           cols,
           rows,
           litWindows,
-          tone: Math.floor(Math.random() * 3),
-          style: randomDubaiStyle()
+          tone: Math.floor(Math.random() * 3)
         });
-        mx += bw + 18;
+        mx += bw + 14;
       }
 
       streetProps = [];
@@ -541,11 +533,11 @@
     let state = 'menu';
     let holding = false;
     let score = 0;
+    let distanceAccumulator = 0;
     let worldSpeed = 210;
     let screenShake = 0;
     let hitFlash = 0;
     let elapsed = 0;
-    let skyFlyerIndex = 0;
 
     const player = {
       x: 110,
@@ -581,7 +573,7 @@
       particles = [];
       floatingTexts = [];
       score = 0;
-      skyFlyerIndex = 0;
+      distanceAccumulator = 0;
       worldSpeed = 215;
       screenShake = 0;
       hitFlash = 0;
@@ -662,13 +654,6 @@
     startBtn.addEventListener('click', startGame);
     restartBtn.addEventListener('click', startGame);
 
-    function nextSkyFlyerKind() {
-      const order = ['carpet', 'taxi', 'falcon'];
-      const kind = order[skyFlyerIndex % order.length];
-      skyFlyerIndex += 1;
-      return kind;
-    }
-
     function spawnObstacle() {
       const playableTop = 74;
       const playableBottom = height - groundHeight - 18;
@@ -699,11 +684,10 @@
           h
         });
       } else {
-        const kind = nextSkyFlyerKind();
-        const r = kind === 'taxi' ? 25 : 22;
+        const r = 22;
         const cy = playableTop + 36 + Math.random() * Math.max(60, playableH - 72);
         obstacles.push({
-          kind,
+          kind: 'drone',
           x: width + 40,
           y: cy,
           baseY: cy,
@@ -772,13 +756,6 @@
       return (dx * dx + dy * dy) < (cr * cr);
     }
 
-    function getCrashReason(obs) {
-      if (obs.kind === 'carpet') return 'Не поделил небо с летающим ковром над Дубаем!';
-      if (obs.kind === 'taxi') return 'Подрезал дубайское аэротакси в час пик!';
-      if (obs.kind === 'falcon') return 'Пересёк траекторию пустынного сокола!';
-      return 'Столкновение с препятствием!';
-    }
-
     function update(dt) {
       elapsed += dt;
 
@@ -802,9 +779,9 @@
       if (farBuildings.length && farBuildings[0].x + farBuildings[0].w < -80) {
         const first = farBuildings.shift();
         const last = farBuildings[farBuildings.length - 1];
-        first.x = last.x + last.w + 10;
-        first.h = 120 + Math.random() * 155;
-        first.style = randomDubaiStyle();
+        first.x = last.x + last.w + 6;
+        first.h = 95 + Math.random() * 125;
+        first.hasSpire = Math.random() < 0.25;
         farBuildings.push(first);
       }
 
@@ -814,9 +791,8 @@
       if (midBuildings.length && midBuildings[0].x + midBuildings[0].w < -120) {
         const first = midBuildings.shift();
         const last = midBuildings[midBuildings.length - 1];
-        first.x = last.x + last.w + 18;
-        first.h = 145 + Math.random() * 145;
-        first.style = randomDubaiStyle();
+        first.x = last.x + last.w + 14;
+        first.h = 120 + Math.random() * 110;
         midBuildings.push(first);
       }
 
@@ -833,7 +809,14 @@
         return;
       }
 
-      worldSpeed = Math.min(390, 215 + score * 2.5);
+      worldSpeed = Math.min(390, 215 + score * 0.45);
+      distanceAccumulator += worldSpeed * dt * 0.05;
+      if (distanceAccumulator >= 1) {
+        const addPts = Math.floor(distanceAccumulator);
+        score += addPts;
+        distanceAccumulator -= addPts;
+        scoreVal.textContent = Math.floor(score);
+      }
 
       const canThrust = holding && player.energy > 0.2;
       if (canThrust) {
@@ -879,7 +862,7 @@
       spawnTimer -= dt;
       if (spawnTimer <= 0) {
         spawnObstacle();
-        const minGap = Math.max(1.05, 1.78 - score * 0.015);
+        const minGap = Math.max(1.05, 1.78 - score * 0.003);
         spawnTimer = minGap + Math.random() * 0.55;
       }
 
@@ -893,9 +876,9 @@
         const obs = obstacles[i];
         obs.x -= worldSpeed * dt;
 
-        if (obs.kind === 'carpet' || obs.kind === 'taxi' || obs.kind === 'falcon') {
-          obs.phase += dt * (obs.kind === 'falcon' ? 4.4 : 3.2);
-          obs.y = obs.baseY + Math.sin(obs.phase) * (obs.kind === 'carpet' ? 24 : 18);
+        if (obs.kind === 'drone') {
+          obs.phase += dt * 3.4;
+          obs.y = obs.baseY + Math.sin(obs.phase) * 26;
         } else if (obs.kind === 'chimney') {
           obs.smokeTimer -= dt;
           if (obs.smokeTimer <= 0) {
@@ -915,10 +898,10 @@
         }
 
         let hit = false;
-        if (obs.kind === 'carpet' || obs.kind === 'taxi' || obs.kind === 'falcon') {
+        if (obs.kind === 'drone') {
           const dx = player.x - obs.x;
           const dy = player.y - obs.y;
-          const sumR = obs.r * 0.88 + Math.min(player.radiusX, player.radiusY) * 0.74;
+          const sumR = obs.r + Math.min(player.radiusX, player.radiusY) * 0.78;
           hit = (dx * dx + dy * dy) < (sumR * sumR);
         } else {
           hit = circleRectCollide(
@@ -934,7 +917,7 @@
 
         if (hit) {
           addParticles(player.x, player.y, 18, ['#ffd166', '#ef476f', '#ffffff'], [70, 200]);
-          endGame(getCrashReason(obs));
+          endGame('Столкновение с препятствием!');
           return;
         }
 
@@ -954,13 +937,13 @@
         const pickR = b.r + Math.max(player.radiusX, player.radiusY) * 0.85;
         if (dx * dx + dy * dy <= pickR * pickR) {
           player.energy = Math.min(player.maxEnergy, player.energy + 18);
-          score += 1;
+          score += 5;
           player.cymbalTimer = 0.35;
-          scoreVal.textContent = String(score);
+          scoreVal.textContent = Math.floor(score);
           updateEnergyUI();
           haptic('success');
           addParticles(b.x, drawY, 10, ['#ffe066', '#ffb703', '#fff3b0'], [45, 130]);
-          addFloatingText(b.x, drawY - 10, '+18 ⚡ · +1', '#ffe066');
+          addFloatingText(b.x, drawY - 10, '+18 ⚡ · +5', '#ffe066');
           bananas.splice(i, 1);
           continue;
         }
@@ -986,73 +969,10 @@
       }
     }
 
-    function drawDubaiTowerShape(x, baseY, w, h, style) {
-      if (style === 'burj') {
-        const tiers = 5;
-        const tierH = h / tiers;
-        const topInset = w * 0.42;
-        ctx.beginPath();
-        ctx.moveTo(x, baseY);
-        for (let i = 0; i < tiers; i++) {
-          const inset = topInset * (i / tiers);
-          const yBot = baseY - i * tierH;
-          const yTop = baseY - (i + 1) * tierH;
-          ctx.lineTo(x + inset, yBot);
-          ctx.lineTo(x + inset + 4, yTop);
-        }
-        ctx.lineTo(x + topInset + 4, baseY - h - 38);
-        ctx.lineTo(x + w - topInset - 4, baseY - h - 38);
-        for (let i = tiers - 1; i >= 0; i--) {
-          const inset = topInset * (i / tiers);
-          const yTop = baseY - (i + 1) * tierH;
-          const yBot = baseY - i * tierH;
-          ctx.lineTo(x + w - inset - 4, yTop);
-          ctx.lineTo(x + w - inset, yBot);
-        }
-        ctx.lineTo(x + w, baseY);
-        ctx.closePath();
-        return;
-      }
-
-      if (style === 'sail') {
-        ctx.beginPath();
-        ctx.moveTo(x + w * 0.12, baseY);
-        ctx.quadraticCurveTo(x + w * 1.18, baseY - h * 0.52, x + w * 0.22, baseY - h);
-        ctx.lineTo(x + w * 0.12, baseY - h);
-        ctx.lineTo(x + w * 0.12, baseY);
-        ctx.closePath();
-        return;
-      }
-
-      if (style === 'twist') {
-        const steps = 10;
-        const stepH = h / steps;
-        ctx.beginPath();
-        for (let i = 0; i <= steps; i++) {
-          const t = i / steps;
-          const shift = Math.sin(t * Math.PI * 0.85) * (w * 0.18);
-          const sy = baseY - i * stepH;
-          if (i === 0) ctx.moveTo(x + shift, sy);
-          else ctx.lineTo(x + shift, sy);
-        }
-        for (let i = steps; i >= 0; i--) {
-          const t = i / steps;
-          const shift = Math.sin(t * Math.PI * 0.85) * (w * 0.18);
-          const sy = baseY - i * stepH;
-          ctx.lineTo(x + shift + w, sy);
-        }
-        ctx.closePath();
-        return;
-      }
-
-      ctx.beginPath();
-      ctx.rect(x, baseY - h, w, h);
-    }
-
     function drawBackground() {
       const skyGrad = ctx.createLinearGradient(0, 0, 0, height - groundHeight);
-      skyGrad.addColorStop(0, '#2d5d8c');
-      skyGrad.addColorStop(0.52, '#73a4c6');
+      skyGrad.addColorStop(0, '#3a6ea5');
+      skyGrad.addColorStop(0.52, '#7ba7c7');
       skyGrad.addColorStop(0.85, '#f4b886');
       skyGrad.addColorStop(1, '#f7d6a1');
       ctx.fillStyle = skyGrad;
@@ -1091,49 +1011,47 @@
       const groundY = height - groundHeight;
 
       for (const b of farBuildings) {
-        ctx.save();
-        drawDubaiTowerShape(b.x, groundY, b.w, b.h, b.style);
-        ctx.fillStyle = 'rgba(72, 98, 128, 0.56)';
-        ctx.fill();
-        ctx.restore();
+        const by = groundY - b.h;
+        ctx.fillStyle = 'rgba(84, 104, 130, 0.52)';
+        ctx.fillRect(b.x, by, b.w, b.h);
+        if (b.hasSpire) {
+          ctx.beginPath();
+          ctx.moveTo(b.x + b.w * 0.5, by - 26);
+          ctx.lineTo(b.x + b.w * 0.5 - 12, by);
+          ctx.lineTo(b.x + b.w * 0.5 + 12, by);
+          ctx.closePath();
+          ctx.fill();
+        }
       }
 
-      const glassPalette = ['#385f7d', '#2b4c66', '#466f8f'];
+      const wallPalette = ['#9e5642', '#8c4c3c', '#ab624c'];
       for (const b of midBuildings) {
         const by = groundY - b.h;
-        ctx.save();
-        drawDubaiTowerShape(b.x, groundY, b.w, b.h, b.style);
-        ctx.fillStyle = glassPalette[b.tone % glassPalette.length];
-        ctx.fill();
-        ctx.clip();
+        ctx.fillStyle = wallPalette[b.tone % wallPalette.length];
+        ctx.fillRect(b.x, by, b.w, b.h);
 
-        const glassGrad = ctx.createLinearGradient(b.x, by, b.x + b.w, groundY);
-        glassGrad.addColorStop(0, 'rgba(180, 228, 255, 0.28)');
-        glassGrad.addColorStop(0.5, 'rgba(255, 225, 165, 0.10)');
-        glassGrad.addColorStop(1, 'rgba(15, 28, 46, 0.35)');
-        ctx.fillStyle = glassGrad;
-        ctx.fillRect(b.x, by - 45, b.w, b.h + 45);
+        ctx.fillStyle = 'rgba(30, 20, 24, 0.25)';
+        ctx.fillRect(b.x, by, b.w, 8);
 
-        const padX = 12;
-        const padY = 16;
+        const padX = 14;
+        const padY = 18;
         const cellW = (b.w - padX * 2) / b.cols;
         const cellH = (b.h - padY * 2) / b.rows;
 
         for (let r = 0; r < b.rows; r++) {
           for (let c = 0; c < b.cols; c++) {
-            const wx = b.x + padX + c * cellW + 3;
-            const wy = by + padY + r * cellH + 3;
-            const ww = Math.max(8, cellW - 6);
-            const wh = Math.max(10, cellH - 8);
+            const wx = b.x + padX + c * cellW + 5;
+            const wy = by + padY + r * cellH + 4;
+            const ww = Math.max(10, cellW - 10);
+            const wh = Math.max(14, cellH - 12);
             const lit = b.litWindows[r * b.cols + c];
-            ctx.fillStyle = lit ? 'rgba(255, 226, 138, 0.85)' : 'rgba(135, 195, 230, 0.22)';
+            ctx.fillStyle = lit ? '#ffe699' : '#39485c';
             ctx.fillRect(wx, wy, ww, wh);
+            ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(wx, wy, ww, wh);
           }
         }
-
-        ctx.fillStyle = 'rgba(246, 204, 122, 0.65)';
-        ctx.fillRect(b.x, by, b.w, 4);
-        ctx.restore();
       }
 
       for (const p of streetProps) {
@@ -1204,96 +1122,29 @@
           ctx.fillStyle = '#f77f00';
           ctx.fillRect(obs.x - 3, obs.y, obs.w + 6, 12);
           ctx.strokeRect(obs.x - 3, obs.y, obs.w + 6, 12);
-        } else if (obs.kind === 'carpet') {
+        } else if (obs.kind === 'drone') {
           ctx.save();
           ctx.translate(obs.x, obs.y);
-          ctx.rotate(Math.sin(obs.phase) * 0.08);
-
-          ctx.fillStyle = '#8b1e3f';
-          ctx.strokeStyle = '#ffd166';
-          ctx.lineWidth = 2;
+          ctx.fillStyle = '#2b2d42';
           ctx.beginPath();
-          ctx.roundRect(-26, -7, 52, 14, 5);
+          ctx.arc(0, 0, obs.r, 0, Math.PI * 2);
           ctx.fill();
-          ctx.stroke();
-
-          ctx.strokeStyle = '#ffe699';
-          ctx.lineWidth = 1.5;
-          ctx.strokeRect(-18, -3, 36, 6);
-
-          ctx.fillStyle = '#ffd166';
-          ctx.fillRect(-29, -3, 3, 6);
-          ctx.fillRect(26, -3, 3, 6);
-          ctx.restore();
-        } else if (obs.kind === 'taxi') {
-          ctx.save();
-          ctx.translate(obs.x, obs.y);
-
-          ctx.fillStyle = '#f8f9fa';
-          ctx.strokeStyle = '#212529';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.roundRect(-24, -10, 48, 20, 9);
-          ctx.fill();
-          ctx.stroke();
-
-          ctx.fillStyle = '#2b9348';
-          ctx.beginPath();
-          ctx.roundRect(-16, -6, 32, 8, 4);
-          ctx.fill();
-
-          const blink = Math.sin(elapsed * 14) > 0;
-          ctx.fillStyle = blink ? '#ffbe0b' : '#3a86ff';
-          ctx.beginPath();
-          ctx.arc(-14, 5, 3, 0, Math.PI * 2);
-          ctx.arc(14, 5, 3, 0, Math.PI * 2);
-          ctx.fill();
-
-          const span = Math.abs(Math.cos(elapsed * 26)) * 22 + 8;
-          ctx.strokeStyle = '#ffd166';
           ctx.lineWidth = 2.5;
-          ctx.beginPath();
-          ctx.moveTo(-span, -14);
-          ctx.lineTo(span, -14);
+          ctx.strokeStyle = '#ef233c';
           ctx.stroke();
-          ctx.restore();
-        } else if (obs.kind === 'falcon') {
-          ctx.save();
-          ctx.translate(obs.x, obs.y);
-          const wingY = Math.sin(elapsed * 16) * 10;
 
-          ctx.fillStyle = '#6f4518';
+          ctx.fillStyle = '#ffbe0b';
           ctx.beginPath();
-          ctx.ellipse(0, 0, 16, 9, 0, 0, Math.PI * 2);
+          ctx.arc(4, 0, 7, 0, Math.PI * 2);
           ctx.fill();
 
-          ctx.fillStyle = '#582f0e';
+          const rotorSpan = Math.abs(Math.cos(elapsed * 28)) * 26 + 8;
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 3;
           ctx.beginPath();
-          ctx.moveTo(-4, -3);
-          ctx.lineTo(-14, -14 - wingY * 0.4);
-          ctx.lineTo(8, -2);
-          ctx.closePath();
-          ctx.fill();
-
-          ctx.beginPath();
-          ctx.moveTo(-4, 3);
-          ctx.lineTo(-14, 14 + wingY * 0.4);
-          ctx.lineTo(8, 2);
-          ctx.closePath();
-          ctx.fill();
-
-          ctx.fillStyle = '#ffb703';
-          ctx.beginPath();
-          ctx.moveTo(15, -2);
-          ctx.lineTo(24, 1);
-          ctx.lineTo(15, 4);
-          ctx.closePath();
-          ctx.fill();
-
-          ctx.fillStyle = '#fff';
-          ctx.beginPath();
-          ctx.arc(8, -2, 2.5, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.moveTo(-rotorSpan, -obs.r - 4);
+          ctx.lineTo(rotorSpan, -obs.r - 4);
+          ctx.stroke();
           ctx.restore();
         }
       }
@@ -1383,16 +1234,16 @@
         const drawH = h * scale;
         ctx.drawImage(customSprite, -drawW * 0.5, -drawH * 0.5, drawW, drawH);
 
-        // Компактный красный овал движения пропеллера над кепкой
+        // Компактный красный овал лопасти поверх пропеллера при наборе высоты
         const thrusting = state === 'playing' && holding && player.energy > 0;
-        const blurWidth = thrusting ? 14 + Math.sin(player.propellerPhase) * 2.5 : 6;
+        const blurWidth = thrusting ? 18 + Math.sin(player.propellerPhase) * 4 : 8;
         ctx.save();
         ctx.translate(0, -drawH * 0.44);
         ctx.fillStyle = thrusting
           ? 'rgba(255, 90, 90, 0.36)'
           : 'rgba(255, 255, 255, 0.14)';
         ctx.beginPath();
-        ctx.ellipse(0, 0, blurWidth, thrusting ? 2.2 : 1.2, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, blurWidth, thrusting ? 3 : 1.5, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       } else {
