@@ -1382,6 +1382,19 @@
         const drawW = w * scale;
         const drawH = h * scale;
         ctx.drawImage(customSprite, -drawW * 0.5, -drawH * 0.5, drawW, drawH);
+
+        // Компактный овал движения пропеллера над кепкой
+        const thrusting = state === 'playing' && holding && player.energy > 0;
+        const blurWidth = thrusting ? 13 + Math.sin(player.propellerPhase) * 3 : 5;
+        ctx.save();
+        ctx.translate(0, -drawH * 0.44);
+        ctx.fillStyle = thrusting
+          ? 'rgba(255, 90, 90, 0.36)'
+          : 'rgba(255, 255, 255, 0.14)';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, blurWidth, thrusting ? 3 : 1.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
       } else {
         drawFallbackMonkey();
       }
