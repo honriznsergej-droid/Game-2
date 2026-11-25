@@ -98,7 +98,35 @@
 
     .hud-right {
       display: flex;
+      align-items: center;
       gap: 8px;
+    }
+
+    .sound-btn {
+      pointer-events: auto;
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(15, 22, 36, 0.72);
+      backdrop-filter: blur(8px);
+      color: #fff;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+      transition: transform 0.1s ease, background 0.15s ease;
+    }
+
+    .sound-btn:active {
+      transform: scale(0.94);
+    }
+
+    .sound-btn.muted {
+      opacity: 0.65;
+      color: #ff8fa3;
     }
 
     .stat-pill {
@@ -243,6 +271,7 @@
       </div>
 
       <div class="hud-right">
+        <button class="sound-btn" id="soundBtn" type="button" aria-label="Звук">🔊</button>
         <div class="stat-pill">
           <div class="stat-title">Бананы</div>
           <div class="stat-value" id="scoreVal">0</div>
@@ -307,6 +336,118 @@
           else tg.HapticFeedback.impactOccurred(type);
         }
       } catch (_) {}
+    }
+
+    // Звуковой движок на Web Audio API (без внешних файлов)
+    const soundBtn = document.getElementById('soundBtn');
+    let soundEnabled = localStorage.getItem('monkey_jetpack_sound') !== 'off';
+    let audioCtx = null;
+    let lastRotorTick = 0;
+
+    function updateSoundUI() {
+      soundBtn.textContent = soundEnabled ? '🔊' : '🔇';
+      soundBtn.classList.toggle('muted', !soundEnabled);
+    }
+    updateSoundUI();
+
+    function ensureAudioContext() {
+      if (!soundEnabled) return null;
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return null;
+      if (!audioCtx) {
+        audioCtx = new AudioContextClass();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+      }
+      return audioCtx;
+    }
+
+    function toggleSound(e) {
+      if (e) e.stopPropagation();
+      soundEnabled = !soundEnabled;
+      localStorage.setItem('monkey_jetpack_sound', soundEnabled ? 'on' : 'off');
+      updateSoundUI();
+      if (soundEnabled) {
+        ensureAudioContext();
+        playBananaSound();
+      }
+    }
+
+    soundBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    soundBtn.addEventListener('click', toggleSound);
+
+    function playRotorPulse() {
+      if (!soundEnabled) return;
+      const nowMs = performance.now();
+      if (nowMs - lastRotorTick < 85) return;
+      lastRotorTick = nowMs;
+
+      const ctxAudio = ensureAudioContext();
+      if (!ctxAudio) return;
+
+      const t = ctxAudio.currentTime;
+      const osc = ctxAudio.createOscillator();
+      const gain = ctxAudio.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(115, t);
+      osc.frequency.exponentialRampToValueAtTime(195, t + 0.055);
+
+      gain.gain.setValueAtTime(0.001, t);
+      gain.gain.linearRampToValueAtTime(0.045, t + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0008, t + 0.065);
+
+      osc.connect(gain);
+      gain.connect(ctxAudio.destination);
+      osc.start(t);
+      osc.stop(t + 0.07);
+    }
+
+    function playBananaSound() {
+      if (!soundEnabled) return;
+      const ctxAudio = ensureAudioContext();
+      if (!ctxAudio) return;
+
+      const t = ctxAudio.currentTime;
+      const notes = [587.33, 880]; // D5 -> A5
+      notes.forEach((freq, idx) => {
+        const osc = ctxAudio.createOscillator();
+        const gain = ctxAudio.createGain();
+        const start = t + idx * 0.055;
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, start);
+
+        gain.gain.setValueAtTime(0.001, start);
+        gain.gain.linearRampToValueAtTime(0.11, start + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.16);
+
+        osc.connect(gain);
+        gain.connect(ctxAudio.destination);
+        osc.start(start);
+        osc.stop(start + 0.17);
+      });
+    }
+
+    function playCrashSound() {
+      if (!soundEnabled) return;
+      const ctxAudio = ensureAudioContext();
+      if (!ctxAudio) return;
+
+      const t = ctxAudio.currentTime;
+      const osc = ctxAudio.createOscillator();
+      const gain = ctxAudio.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(180, t);
+      osc.frequency.exponentialRampToValueAtTime(48, t + 0.34);
+
+      gain.gain.setValueAtTime(0.12, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.36);
+
+      osc.connect(gain);
+      gain.connect(ctxAudio.destination);
+      osc.start(t);
+      osc.stop(t + 0.37);
     }
 
     const canvas = document.getElementById('gameCanvas');
@@ -508,6 +649,8 @@
     }
 
     async function startGame() {
+      ensureAudioContext();
+
       if (!spriteLoaded) {
         startBtn.textContent = 'ЗАГРУЗКА...';
         await Promise.race([
@@ -530,6 +673,7 @@
       holding = false;
       screenShake = 14;
       hitFlash = 0.45;
+      playCrashSound();
       haptic('error');
 
       const finalInt = Math.floor(score);
@@ -556,8 +700,11 @@
         holding = false;
         return;
       }
-      if (active && !holding && player.energy > 1) {
-        haptic('light');
+      if (active) {
+        ensureAudioContext();
+        if (!holding && player.energy > 1) {
+          haptic('light');
+        }
       }
       holding = active;
     }
@@ -764,6 +911,7 @@
         player.vy -= 1180 * dt;
         player.energy = Math.max(0, player.energy - 27 * dt);
         player.propellerPhase += dt * 46;
+        playRotorPulse();
       } else {
         holding = false;
         player.vy += 690 * dt;
@@ -879,9 +1027,10 @@
           player.cymbalTimer = 0.35;
           scoreVal.textContent = String(score);
           updateEnergyUI();
+          playBananaSound();
           haptic('success');
           addParticles(b.x, drawY, 10, ['#ffe066', '#ffb703', '#fff3b0'], [45, 130]);
-          addFloatingText(b.x, drawY - 10, '+18 ⚡ · +1', '#ffe066');
+          addFloatingText(b.x, drawY - 10, '+1', '#ffe066');
           bananas.splice(i, 1);
           continue;
         }
