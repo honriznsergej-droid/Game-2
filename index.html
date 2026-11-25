@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Monkey Propeller Jetpack</title>
-  <!-- Мгновенная предзагрузка спрайта браузером ещё до запуска скриптов -->
   <link rel="preload" as="image" href="https://honriznsergej-droid.github.io/Game-2/monkey.png" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
@@ -199,25 +198,6 @@
       transform: scale(0.97);
     }
 
-    .btn-secondary {
-      margin-top: 10px;
-      width: 100%;
-      border: 1px solid rgba(255, 255, 255, 0.22);
-      border-radius: 12px;
-      padding: 10px 14px;
-      font-size: 13px;
-      font-weight: 600;
-      color: #fff;
-      background: rgba(255, 255, 255, 0.08);
-      cursor: pointer;
-    }
-
-    .sprite-status {
-      margin-top: 8px;
-      font-size: 11px;
-      color: rgba(255, 255, 255, 0.65);
-    }
-
     .final-stats {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -283,9 +263,6 @@
           <b>Отпусти</b>, чтобы плавно планировать вниз. Лови бананы 🍌 — они восстанавливают энергию!
         </p>
         <button class="btn-primary" id="startBtn">ПОЛЕТЕЛИ!</button>
-        <button class="btn-secondary" id="uploadSpriteBtn">Заменить спрайт вручную (PNG)</button>
-        <div class="sprite-status" id="spriteStatus">Загрузка спрайта обезьянки...</div>
-        <input type="file" id="spriteInput" accept="image/*" hidden />
       </div>
     </div>
 
@@ -310,7 +287,6 @@
   </div>
 
   <script>
-    // Прямая ссылка на спрайт обезьянки
     const SPRITE_URL = 'https://honriznsergej-droid.github.io/Game-2/monkey.png';
 
     const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
@@ -347,69 +323,10 @@
     const finalBest = document.getElementById('finalBest');
     const startBtn = document.getElementById('startBtn');
     const restartBtn = document.getElementById('restartBtn');
-    const uploadSpriteBtn = document.getElementById('uploadSpriteBtn');
-    const spriteInput = document.getElementById('spriteInput');
-    const spriteStatus = document.getElementById('spriteStatus');
 
-    let customSprite = null;
+    let monkeySprite = null;
     let spriteLoaded = false;
 
-    // Убираем однотонный фон только если загрузили локальный файл без прозрачности
-    function cleanKeyBackground(img) {
-      const w = img.naturalWidth || img.width;
-      const h = img.naturalHeight || img.height;
-      if (!w || !h) return img;
-
-      const off = document.createElement('canvas');
-      off.width = w;
-      off.height = h;
-      const octx = off.getContext('2d');
-      octx.drawImage(img, 0, 0, w, h);
-
-      let data;
-      try {
-        data = octx.getImageData(0, 0, w, h);
-      } catch (_) {
-        return img;
-      }
-
-      const px = data.data;
-      for (let i = 3; i < px.length; i += 4) {
-        if (px[i] < 250) return off; // Уже есть прозрачность
-      }
-
-      const corners = [[0, 0], [w - 1, 0], [0, h - 1], [w - 1, h - 1]];
-      let bgR = 0, bgG = 0, bgB = 0;
-      for (const [cx, cy] of corners) {
-        const idx = (cy * w + cx) * 4;
-        bgR += px[idx];
-        bgG += px[idx + 1];
-        bgB += px[idx + 2];
-      }
-      bgR /= 4; bgG /= 4; bgB /= 4;
-
-      const isBlackBg = bgR < 22 && bgG < 22 && bgB < 22;
-      const isGreenBg = bgG > bgR + 45 && bgG > bgB + 45;
-      if (!isBlackBg && !isGreenBg) return off;
-
-      for (let i = 0; i < px.length; i += 4) {
-        const r = px[i], g = px[i + 1], b = px[i + 2];
-        if (isBlackBg) {
-          const maxC = Math.max(r, g, b);
-          if (maxC < 26) px[i + 3] = 0;
-          else if (maxC < 52) px[i + 3] = Math.round(((maxC - 26) / 26) * 255);
-        } else if (isGreenBg) {
-          const greenExcess = g - Math.max(r, b);
-          if (greenExcess > 40) px[i + 3] = 0;
-          else if (greenExcess > 15) px[i + 3] = Math.round((1 - (greenExcess - 15) / 25) * 255);
-        }
-      }
-
-      octx.putImageData(data, 0, 0);
-      return off;
-    }
-
-    // Гарантированная загрузка monkey.png без лишних CORS-задержек и сброса кэша
     function preloadMainSprite() {
       return new Promise((resolve) => {
         const img = new Image();
@@ -417,9 +334,8 @@
         img.fetchPriority = 'high';
 
         const finishSuccess = () => {
-          customSprite = img;
+          monkeySprite = img;
           spriteLoaded = true;
-          spriteStatus.textContent = 'Спрайт обезьянки готов ✓';
           resolve(true);
         };
 
@@ -433,8 +349,7 @@
 
         img.onerror = () => {
           spriteLoaded = false;
-          customSprite = null;
-          spriteStatus.textContent = 'Не удалось загрузить monkey.png (используется запасной вид)';
+          monkeySprite = null;
           resolve(false);
         };
 
@@ -443,20 +358,6 @@
     }
 
     const spriteReadyPromise = preloadMainSprite();
-
-    uploadSpriteBtn.addEventListener('click', () => spriteInput.click());
-    spriteInput.addEventListener('change', (e) => {
-      const file = e.target.files && e.target.files[0];
-      if (!file) return;
-      const url = URL.createObjectURL(file);
-      const img = new Image();
-      img.onload = () => {
-        customSprite = cleanKeyBackground(img);
-        spriteLoaded = true;
-        spriteStatus.textContent = `Загружен файл: ${file.name}`;
-      };
-      img.src = url;
-    });
 
     let width = 0;
     let height = 0;
@@ -607,7 +508,6 @@
     }
 
     async function startGame() {
-      // Если спрайт ещё догружается — ждём его (макс. 1.5 сек), чтобы не было пустого кадра
       if (!spriteLoaded) {
         startBtn.textContent = 'ЗАГРУЗКА...';
         await Promise.race([
@@ -863,13 +763,11 @@
       if (canThrust) {
         player.vy -= 1180 * dt;
         player.energy = Math.max(0, player.energy - 27 * dt);
-        // Быстрое вращение пропеллера при тяге (без генерации кружков/дыма!)
         player.propellerPhase += dt * 46;
       } else {
         holding = false;
         player.vy += 690 * dt;
         player.energy = Math.min(player.maxEnergy, player.energy + 11 * dt);
-        // Плавное замедленное вращение при планировании
         player.propellerPhase += dt * (player.vy < 0 ? 24 : 11);
       }
 
@@ -1347,12 +1245,10 @@
       }
     }
 
-    // Анимированный 3D-подобный 2D-пропеллер на макушке
     function drawAnimatedPropeller(x, y, phase, thrusting) {
       ctx.save();
       ctx.translate(x, y);
 
-      // Металлический стержень-ось
       ctx.fillStyle = '#adb5bd';
       ctx.strokeStyle = '#212529';
       ctx.lineWidth = 1.2;
@@ -1361,7 +1257,6 @@
       ctx.fill();
       ctx.stroke();
 
-      // Лёгкий полупрозрачный диск вращения при работе на полную мощность
       if (thrusting) {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
         ctx.beginPath();
@@ -1373,7 +1268,6 @@
       const cosA = Math.cos(phase);
       const sinA = Math.sin(phase);
 
-      // Две лопасти, поочерёдно заходящие на передний и задний план
       const blades = [
         { dir: 1, depth: sinA, fill: '#ff595e', stroke: '#780000' },
         { dir: -1, depth: -sinA, fill: '#ffca3a', stroke: '#7f5500' }
@@ -1394,7 +1288,6 @@
         ctx.stroke();
       }
 
-      // Центральный колпачок-гайка
       ctx.fillStyle = '#ffd166';
       ctx.strokeStyle = '#3d2c00';
       ctx.lineWidth = 1.3;
@@ -1458,17 +1351,15 @@
 
       const thrusting = state === 'playing' && holding && player.energy > 0;
 
-      if (spriteLoaded && customSprite) {
-        const w = customSprite.naturalWidth || customSprite.width || 1;
-        const h = customSprite.naturalHeight || customSprite.height || 1;
+      if (spriteLoaded && monkeySprite) {
+        const w = monkeySprite.naturalWidth || monkeySprite.width || 1;
+        const h = monkeySprite.naturalHeight || monkeySprite.height || 1;
         const targetH = 88;
         const scale = targetH / h;
         const drawW = w * scale;
         const drawH = h * scale;
 
-        ctx.drawImage(customSprite, -drawW * 0.5, -drawH * 0.5, drawW, drawH);
-
-        // Координаты оси пропеллера над головой (при необходимости можно подправить -0.45)
+        ctx.drawImage(monkeySprite, -drawW * 0.5, -drawH * 0.5, drawW, drawH);
         drawAnimatedPropeller(0, -drawH * 0.45, player.propellerPhase, thrusting);
       } else {
         drawFallbackMonkey();
