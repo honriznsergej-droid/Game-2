@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Monkey Propeller Jetpack</title>
+  <!-- Мгновенная предзагрузка спрайта браузером ещё до запуска скриптов -->
+  <link rel="preload" as="image" href="https://honriznsergej-droid.github.io/Game-2/monkey.png" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     * {
@@ -282,7 +284,7 @@
         </p>
         <button class="btn-primary" id="startBtn">ПОЛЕТЕЛИ!</button>
         <button class="btn-secondary" id="uploadSpriteBtn">Заменить спрайт вручную (PNG)</button>
-        <div class="sprite-status" id="spriteStatus">Загрузка monkey.png...</div>
+        <div class="sprite-status" id="spriteStatus">Загрузка спрайта обезьянки...</div>
         <input type="file" id="spriteInput" accept="image/*" hidden />
       </div>
     </div>
@@ -308,8 +310,8 @@
   </div>
 
   <script>
-    // Имя файла спрайта в корне репозитория рядом с index.html
-    const SPRITE_SRC = 'monkey.png';
+    // Прямая ссылка на спрайт обезьянки
+    const SPRITE_URL = 'https://honriznsergej-droid.github.io/Game-2/monkey.png';
 
     const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
     if (tg) {
@@ -352,7 +354,7 @@
     let customSprite = null;
     let spriteLoaded = false;
 
-    // Автоматически убираем тёмный/зелёный фон, если файл не имеет альфа-канала
+    // Убираем однотонный фон только если загрузили локальный файл без прозрачности
     function cleanKeyBackground(img) {
       const w = img.naturalWidth || img.width;
       const h = img.naturalHeight || img.height;
@@ -372,21 +374,11 @@
       }
 
       const px = data.data;
-      let hasTransparent = false;
       for (let i = 3; i < px.length; i += 4) {
-        if (px[i] < 250) {
-          hasTransparent = true;
-          break;
-        }
+        if (px[i] < 250) return off; // Уже есть прозрачность
       }
-      if (hasTransparent) return off;
 
-      const corners = [
-        [0, 0],
-        [w - 1, 0],
-        [0, h - 1],
-        [w - 1, h - 1]
-      ];
+      const corners = [[0, 0], [w - 1, 0], [0, h - 1], [w - 1, h - 1]];
       let bgR = 0, bgG = 0, bgB = 0;
       for (const [cx, cy] of corners) {
         const idx = (cy * w + cx) * 4;
@@ -398,7 +390,6 @@
 
       const isBlackBg = bgR < 22 && bgG < 22 && bgB < 22;
       const isGreenBg = bgG > bgR + 45 && bgG > bgB + 45;
-
       if (!isBlackBg && !isGreenBg) return off;
 
       for (let i = 0; i < px.length; i += 4) {
@@ -418,30 +409,53 @@
       return off;
     }
 
-    function loadSpriteFromUrl(url, labelText) {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        customSprite = cleanKeyBackground(img);
-        spriteLoaded = true;
-        spriteStatus.textContent = labelText || `Спрайт загружен: ${url}`;
-      };
-      img.onerror = () => {
-        spriteLoaded = false;
-        customSprite = null;
-        spriteStatus.textContent = `Файл "${url}" не найден — используется запасной рисунок`;
-      };
-      img.src = url + (url.startsWith('blob:') ? '' : `?v=${Date.now()}`);
+    // Гарантированная загрузка monkey.png без лишних CORS-задержек и сброса кэша
+    function preloadMainSprite() {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.decoding = 'sync';
+        img.fetchPriority = 'high';
+
+        const finishSuccess = () => {
+          customSprite = img;
+          spriteLoaded = true;
+          spriteStatus.textContent = 'Спрайт обезьянки готов ✓';
+          resolve(true);
+        };
+
+        img.onload = () => {
+          if (img.decode) {
+            img.decode().then(finishSuccess).catch(finishSuccess);
+          } else {
+            finishSuccess();
+          }
+        };
+
+        img.onerror = () => {
+          spriteLoaded = false;
+          customSprite = null;
+          spriteStatus.textContent = 'Не удалось загрузить monkey.png (используется запасной вид)';
+          resolve(false);
+        };
+
+        img.src = SPRITE_URL;
+      });
     }
 
-    loadSpriteFromUrl(SPRITE_SRC, `Подключён спрайт: ${SPRITE_SRC}`);
+    const spriteReadyPromise = preloadMainSprite();
 
     uploadSpriteBtn.addEventListener('click', () => spriteInput.click());
     spriteInput.addEventListener('change', (e) => {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
       const url = URL.createObjectURL(file);
-      loadSpriteFromUrl(url, `Загружен файл: ${file.name}`);
+      const img = new Image();
+      img.onload = () => {
+        customSprite = cleanKeyBackground(img);
+        spriteLoaded = true;
+        spriteStatus.textContent = `Загружен файл: ${file.name}`;
+      };
+      img.src = url;
     });
 
     let width = 0;
@@ -592,7 +606,17 @@
       updateEnergyUI();
     }
 
-    function startGame() {
+    async function startGame() {
+      // Если спрайт ещё догружается — ждём его (макс. 1.5 сек), чтобы не было пустого кадра
+      if (!spriteLoaded) {
+        startBtn.textContent = 'ЗАГРУЗКА...';
+        await Promise.race([
+          spriteReadyPromise,
+          new Promise((r) => setTimeout(r, 1500))
+        ]);
+        startBtn.textContent = 'ПОЛЕТЕЛИ!';
+      }
+
       resetGame();
       state = 'playing';
       startOverlay.classList.add('hidden');
@@ -829,7 +853,7 @@
 
       if (state !== 'playing') {
         player.y = (height - groundHeight) * 0.42 + Math.sin(elapsed * 2.5) * 8;
-        player.propellerPhase += dt * 12;
+        player.propellerPhase += dt * 16;
         return;
       }
 
@@ -839,15 +863,14 @@
       if (canThrust) {
         player.vy -= 1180 * dt;
         player.energy = Math.max(0, player.energy - 27 * dt);
-        player.propellerPhase += dt * 42;
-        if (Math.random() < 0.55) {
-          addParticles(player.x, player.y - 36, 1, ['#ffffff', '#ffe066', '#90e0ef'], [25, 75]);
-        }
+        // Быстрое вращение пропеллера при тяге (без генерации кружков/дыма!)
+        player.propellerPhase += dt * 46;
       } else {
         holding = false;
         player.vy += 690 * dt;
         player.energy = Math.min(player.maxEnergy, player.energy + 11 * dt);
-        player.propellerPhase += dt * (player.vy < 0 ? 22 : 9);
+        // Плавное замедленное вращение при планировании
+        player.propellerPhase += dt * (player.vy < 0 ? 24 : 11);
       }
 
       player.vy = Math.max(-360, Math.min(370, player.vy));
@@ -1324,144 +1347,65 @@
       }
     }
 
-    function drawFallbackMonkey() {
-      ctx.fillStyle = '#8b4513';
-      ctx.beginPath();
-      ctx.ellipse(0, 8, 18, 22, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = '#2b6cb0';
-      ctx.fillRect(-15, 16, 30, 14);
-
-      ctx.fillStyle = '#a0522d';
-      ctx.beginPath();
-      ctx.arc(0, -14, 17, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = '#f3d5b5';
-      ctx.beginPath();
-      ctx.ellipse(0, -11, 11, 10, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = '#fff';
-      ctx.beginPath();
-      ctx.arc(-5, -16, 4.5, 0, Math.PI * 2);
-      ctx.arc(5, -16, 4.5, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = '#111';
-      ctx.beginPath();
-      ctx.arc(-5, -16, 2, 0, Math.PI * 2);
-      ctx.arc(5, -16, 2, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = '#e63946';
-      ctx.beginPath();
-      ctx.arc(0, -25, 16, Math.PI, 0);
-      ctx.fill();
-    }
-
-    function drawMonkey() {
+    // Анимированный 3D-подобный 2D-пропеллер на макушке
+    function drawAnimatedPropeller(x, y, phase, thrusting) {
       ctx.save();
-      ctx.translate(player.x, player.y);
-      ctx.rotate(player.angle);
+      ctx.translate(x, y);
 
-      if (player.cymbalTimer > 0) {
-        ctx.strokeStyle = 'rgba(255, 224, 102, 0.75)';
-        ctx.lineWidth = 3;
+      // Металлический стержень-ось
+      ctx.fillStyle = '#adb5bd';
+      ctx.strokeStyle = '#212529';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.roundRect(-2, -1, 4, 8, 1.5);
+      ctx.fill();
+      ctx.stroke();
+
+      // Лёгкий полупрозрачный диск вращения при работе на полную мощность
+      if (thrusting) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
         ctx.beginPath();
-        ctx.arc(0, 4, 44 + (0.35 - player.cymbalTimer) * 45, 0, Math.PI * 2);
+        ctx.ellipse(0, -1, 21, 2.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      const maxSpan = 20;
+      const cosA = Math.cos(phase);
+      const sinA = Math.sin(phase);
+
+      // Две лопасти, поочерёдно заходящие на передний и задний план
+      const blades = [
+        { dir: 1, depth: sinA, fill: '#ff595e', stroke: '#780000' },
+        { dir: -1, depth: -sinA, fill: '#ffca3a', stroke: '#7f5500' }
+      ];
+      blades.sort((a, b) => a.depth - b.depth);
+
+      for (const blade of blades) {
+        const span = cosA * maxSpan * blade.dir;
+        const thickness = 2.6 + blade.depth * 0.7;
+
+        ctx.fillStyle = blade.fill;
+        ctx.strokeStyle = blade.stroke;
+        ctx.lineWidth = 1.3;
+
+        ctx.beginPath();
+        ctx.ellipse(span * 0.5, -1, Math.abs(span * 0.5) + 1.5, Math.max(1.5, thickness), 0, 0, Math.PI * 2);
+        ctx.fill();
         ctx.stroke();
       }
 
-      if (spriteLoaded && customSprite) {
-        const w = customSprite.width || 1;
-        const h = customSprite.height || 1;
-        const targetH = 88;
-        const scale = targetH / h;
-        const drawW = w * scale;
-        const drawH = h * scale;
-        ctx.drawImage(customSprite, -drawW * 0.5, -drawH * 0.5, drawW, drawH);
-
-        // Компактный красный овал лопасти поверх пропеллера при наборе высоты
-        const thrusting = state === 'playing' && holding && player.energy > 0;
-        const blurWidth = thrusting ? 18 + Math.sin(player.propellerPhase) * 4 : 8;
-        ctx.save();
-        ctx.translate(0, -drawH * 0.44);
-        ctx.fillStyle = thrusting
-          ? 'rgba(255, 90, 90, 0.36)'
-          : 'rgba(255, 255, 255, 0.14)';
-        ctx.beginPath();
-        ctx.ellipse(0, 0, blurWidth, thrusting ? 3 : 1.5, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      } else {
-        drawFallbackMonkey();
-      }
+      // Центральный колпачок-гайка
+      ctx.fillStyle = '#ffd166';
+      ctx.strokeStyle = '#3d2c00';
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.arc(0, -1.5, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
 
       ctx.restore();
     }
 
-    function drawEffects() {
-      for (const p of particles) {
-        const alpha = Math.max(0, p.life / p.maxLife);
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        ctx.fillStyle = p.color;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
-
-      for (const ft of floatingTexts) {
-        const alpha = Math.max(0, ft.life / ft.maxLife);
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        ctx.font = '800 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillStyle = '#111827';
-        ctx.fillText(ft.text, ft.x + 1.5, ft.y + 1.5);
-        ctx.fillStyle = ft.color;
-        ctx.fillText(ft.text, ft.x, ft.y);
-        ctx.restore();
-      }
-
-      if (hitFlash > 0) {
-        ctx.fillStyle = `rgba(239, 68, 68, ${hitFlash * 0.55})`;
-        ctx.fillRect(0, 0, width, height);
-      }
-    }
-
-    function render() {
-      ctx.save();
-      if (screenShake > 0) {
-        const sx = (Math.random() - 0.5) * screenShake;
-        const sy = (Math.random() - 0.5) * screenShake;
-        ctx.translate(sx, sy);
-      }
-
-      drawBackground();
-      drawBananas();
-      drawObstacles();
-      drawMonkey();
-      drawEffects();
-
-      ctx.restore();
-    }
-
-    let lastTime = performance.now();
-    function loop(now) {
-      const dt = Math.min(0.05, (now - lastTime) / 1000);
-      lastTime = now;
-      update(dt);
-      render();
-      requestAnimationFrame(loop);
-    }
-
-    resize();
-    resetGame();
-    requestAnimationFrame(loop);
-  </script>
-</body>
-</html>
+    function drawFallbackMonkey() {
+      ctx.fillStyle = '#8b4513';
+      ctx.beginPath();
